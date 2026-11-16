@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô phỏng 2: Sơ đồ đấu nối nhanh bộ linh kiện 5V</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font chữ Be Vietnam Pro & Inter hỗ trợ tiếng Việt sắc nét -->
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Be Vietnam Pro', 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+        /* Hiệu ứng dây dẫn khi di chuột */
+        .wire-path {
+            cursor: pointer;
+            transition: stroke-width 0.15s ease, filter 0.15s ease;
+        }
+        .wire-path:hover {
+            stroke-width: 7px !important;
+            filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.7));
+        }
+        /* Hiệu ứng dòng điện chạy qua dây khi kích hoạt */
+        @keyframes currentFlow {
+            0% { stroke-dashoffset: 24; }
+            100% { stroke-dashoffset: 0; }
+        }
+        .wire-active-flow {
+            stroke-dasharray: 8 4;
+            animation: currentFlow 0.5s linear infinite;
+        }
+        /* Hiệu ứng chân linh kiện đang được chọn */
+        @keyframes pinPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.7); }
+            50% { transform: scale(1.25); box-shadow: 0 0 0 8px rgba(14, 165, 233, 0); }
+        }
+        .pin-selected {
+            animation: pinPulse 1.1s infinite;
+            border-color: #0284c7 !important;
+            background-color: #38bdf8 !important;
+        }
+        /* Hiệu ứng tia lửa/nhấp nháy đỏ khi ngắn mạch */
+        @keyframes shortCircuitFlash {
+            0%, 100% { background-color: rgba(239, 68, 68, 0.08); }
+            50% { background-color: rgba(239, 68, 68, 0.28); }
+        }
+        .short-circuit-bg {
+            animation: shortCircuitFlash 0.6s ease-in-out infinite;
+        }
+        /* Hiệu ứng cánh quạt bơm quay */
+        @keyframes spinImpeller {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .pump-spinning {
+            transform-origin: center;
+            animation: spinImpeller 0.4s linear infinite;
+        }
+        /* Hiệu ứng nước phun */
+        @keyframes sprayDrop {
+            0% { transform: translate(0, 0); opacity: 1; }
+            100% { transform: translate(16px, 14px); opacity: 0; }
+        }
+        .spray-anim {
+            animation: sprayDrop 0.55s ease-out infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- HEADER BANNER -->
+    <header class="bg-gradient-to-r from-slate-900 via-sky-900 to-teal-900 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+                <div class="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase mb-1">
+                    <span>🔌 Thực hành An toàn Điện 5V • Tiết 2 - Hoạt động 5</span>
+                </div>
+                <h1 class="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight">
+                    MÔ PHỎNG 2: SƠ ĐỒ ĐẤU NỐI NHANH BỘ LINH KIỆN 5V
+                </h1>
+                <p class="text-sky-100 text-xs sm:text-sm mt-1">
+                    💡 <strong>Hướng dẫn:</strong> Bấm chọn <strong>chân thứ nhất</strong>, sau đó bấm chọn <strong>chân thứ hai</strong> để nối dây (Bấm trực tiếp vào dây đã nối để xóa).
+                </p>
+            </div>
+
+            <!-- Thanh công cụ nút điều khiển -->
+            <div class="flex flex-wrap items-center gap-2 bg-white/10 p-2 rounded-2xl border border-white/15">
+                <button id="btnCheckPower" class="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold px-4 py-2.5 rounded-xl shadow transition text-xs sm:text-sm">
+                    <span>⚡</span>
+                    <span>Kiểm tra &amp; Cấp nguồn 5V</span>
+                </button>
+                <button id="btnAutoWire" class="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-white font-bold px-3.5 py-2.5 rounded-xl shadow transition text-xs sm:text-sm">
+                    <span>🪄</span>
+                    <span>Nối mẫu tự động (Gợi ý)</span>
+                </button>
+                <button id="btnClearAll" class="flex items-center gap-1.5 bg-rose-500/80 hover:bg-rose-500 text-white font-bold px-3.5 py-2.5 rounded-xl transition text-xs sm:text-sm">
+                    <span>🗑️</span>
+                    <span>Xóa tất cả dây</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- THANH TRẠNG THÁI & TIẾN ĐỘ MỐI NỐI -->
+    <div class="bg-white border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <!-- Thanh tiến độ số mối nối đúng -->
+            <div class="flex items-center gap-3 flex-1 max-w-md">
+                <span class="text-xs sm:text-sm font-bold text-slate-700 whitespace-nowrap">Tiến độ đấu nối:</span>
+                <div class="flex-1 bg-slate-200 h-3 rounded-full overflow-hidden">
+                    <div id="progressBar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <span id="progressText" class="text-xs sm:text-sm font-extrabold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-0.5 rounded-lg whitespace-nowrap">
+                    0/8 mối nối
+                </span>
+            </div>
+
+            <!-- Trạng thái mạch / Cảnh báo -->
+            <div id="bannerStatus" class="flex items-center gap-2 text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+                <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                <span id="statusMessage">Chưa cấp nguồn — Hãy hoàn thành 8 mối nối giữa các linh kiện.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- KHU VỰC CHÍNH: BẢNG MẠCH THỰC HÀNH TƯƠNG TÁC + BẢNG KIỂM THỬ -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-5 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        <!-- CỘT BẢNG MẠCH TƯƠNG TÁC (8/12) -->
+        <section class="lg:col-span-8 flex flex-col">
+            <div id="circuitBoard" class="relative bg-white rounded-3xl shadow-md border-2 border-slate-200 p-4 sm:p-6 min-h-[540px] flex flex-col justify-between overflow-hidden select-none">
+                
+                <!-- Lớp lưới chấm kỹ thuật nền -->
+                <div class="absolute inset-0 opacity-30 pointer-events-none" style="background-image: radial-gradient(#94a3b8 1.2px, transparent 1.2px); background-size: 20px 20px;"></div>
+
+                <!-- SVG CANVAS ĐÈ LÊN ĐỂ VẼ DÂY NỐI VÀ TIA LỬA -->
+                <svg id="wireSvg" class="absolute inset-0 w-full h-full z-20 pointer-events-none">
+                    <defs>
+                        <filter id="glowRed" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="4" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                    </defs>
+                    <!-- Nhóm chứa các dây đã nối (bật pointer-events để click xóa dây) -->
+                    <g id="wiresLayer" class="pointer-events-auto"></g>
+                    <!-- Dây tạm khi đang chọn 1 chân -->
+                    <path id="previewWire" d="" fill="none" stroke="#0284c7" stroke-width="3.5" stroke-dasharray="6 4" class="hidden" />
+                    <!-- Hiệu ứng tia lửa ngắn mạch -->
+                    <g id="sparkLayer" class="hidden"></g>
+                </svg>
+
+                <!-- HÀNG TRÊN: KHỐI 1 (NGUỒN 5V) & KHỐI 2 (CẢM BIẾN ĐỘ ẨM LM393) -->
+                <div class="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10">
+
+                    <!-- KHỐI 1: NGUỒN ĐIỆN 5V DC -->
+                    <div class="bg-slate-900 text-white rounded-2xl p-4 shadow-lg border-2 border-slate-700 flex flex-col justify-between">
+                        <div class="flex items-center justify-between border-b border-slate-700 pb-2 mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🔋</span>
+                                <div>
+                                    <h3 class="text-sm font-extrabold text-amber-400">KHỐI 1: NGUỒN 5V DC</h3>
+                                    <p class="text-[11px] text-slate-400">Hộp pin / Cổng USB 5V an toàn</p>
+                                </div>
+                            </div>
+                            <span id="powerLed" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-400 border border-slate-600">OFF</span>
+                        </div>
+
+                        <!-- Minh họa hộp pin & 2 đầu ra -->
+                        <div class="flex items-center justify-between bg-slate-800/80 rounded-xl p-3 border border-slate-700">
+                            <div class="flex items-center gap-2">
+                                <div class="w-10 h-14 rounded-lg bg-amber-500/20 border border-amber-400/50 flex flex-col items-center justify-center text-amber-300 font-extrabold text-xs">
+                                    <span>5V</span>
+                                    <span class="text-[9px] font-normal">DC</span>
+                                </div>
+                                <div class="text-[11px] text-slate-300 leading-tight">
+                                    Cấp nguồn chung cho:<br>
+                                    • Cảm biến độ ẩm<br>
+                                    • Cuộn hút &amp; Bơm
+                                </div>
+                            </div>
+
+                            <!-- 2 Chân kết nối của Nguồn 5V -->
+                            <div class="flex flex-col gap-3">
+                                <button type="button" data-pin="PWR_5V" class="pin-btn group flex items-center justify-end gap-2 focus:outline-none">
+                                    <span class="text-xs font-extrabold text-rose-400 group-hover:underline">+5V (Đỏ)</span>
+                                    <span id="pin-PWR_5V" class="w-5 h-5 rounded-full bg-rose-500 border-2 border-white shadow-md flex items-center justify-center transition-transform group-hover:scale-125"></span>
+                                </button>
+                                <button type="button" data-pin="PWR_GND" class="pin-btn group flex items-center justify-end gap-2 focus:outline-none">
+                                    <span class="text-xs font-extrabold text-slate-300 group-hover:underline">GND (Đen)</span>
+                                    <span id="pin-PWR_GND" class="w-5 h-5 rounded-full bg-slate-950 border-2 border-white shadow-md flex items-center justify-center transition-transform group-hover:scale-125"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KHỐI 2: CẢM BIẾN ĐỘ ẨM ĐẤT LM393 -->
+                    <div class="bg-sky-950 text-white rounded-2xl p-4 shadow-lg border-2 border-sky-700 flex flex-col justify-between">
+                        <div class="flex items-center justify-between border-b border-sky-800 pb-2 mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🌱</span>
+                                <div>
+                                    <h3 class="text-sm font-extrabold text-sky-300">KHỐI 2: CẢM BIẾN ĐỘ ẨM</h3>
+                                    <p class="text-[11px] text-sky-200/70">Module so sánh LM393 + Đầu dò</p>
+                                </div>
+                            </div>
+                            <span id="sensorStateBadge" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-sky-900 text-sky-300 border border-sky-700">LM393</span>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-sky-900/60 rounded-xl p-3 border border-sky-800">
+                            <!-- 3 Chân bên trái của Cảm biến -->
+                            <div class="flex flex-col gap-2.5">
+                                <button type="button" data-pin="SEN_VCC" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-SEN_VCC" class="w-5 h-5 rounded-full bg-rose-500 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-rose-300 group-hover:underline">VCC (+5V)</span>
+                                </button>
+                                <button type="button" data-pin="SEN_GND" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-SEN_GND" class="w-5 h-5 rounded-full bg-slate-950 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-slate-300 group-hover:underline">GND (-)</span>
+                                </button>
+                                <button type="button" data-pin="SEN_DO" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-SEN_DO" class="w-5 h-5 rounded-full bg-amber-400 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-amber-300 group-hover:underline">DO (Tín hiệu)</span>
+                                </button>
+                            </div>
+
+                            <!-- Minh họa đầu dò cảm biến cắm đất -->
+                            <div class="flex flex-col items-center">
+                                <div class="w-12 h-10 rounded-t-md bg-sky-600 border border-sky-400 flex items-center justify-center text-[9px] font-bold">
+                                    LM393
+                                </div>
+                                <div class="flex gap-2">
+                                    <div class="w-2 h-8 bg-slate-300 rounded-b"></div>
+                                    <div class="w-2 h-8 bg-slate-300 rounded-b"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KHOẢNG TRỐNG GIỮA ĐỂ DÂY ĐI QUA RÕ RÀNG -->
+                <div class="h-12 sm:h-16"></div>
+
+                <!-- HÀNG DƯỚI: KHỐI 3 (MODULE RELAY 1 KÊNH 5V) & KHỐI 4 (MÁY BƠM CHÌM MINI 5V) -->
+                <div class="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10">
+
+                    <!-- KHỐI 3: MODULE RELAY 1 KÊNH 5V -->
+                    <div class="bg-indigo-950 text-white rounded-2xl p-4 shadow-lg border-2 border-indigo-700 flex flex-col justify-between">
+                        <div class="flex items-center justify-between border-b border-indigo-800 pb-2 mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🎛️</span>
+                                <div>
+                                    <h3 class="text-sm font-extrabold text-indigo-300">KHỐI 3: MODULE RELAY 5V</h3>
+                                    <p class="text-[11px] text-indigo-200/70">Kích mức thấp (Low-level trigger)</p>
+                                </div>
+                            </div>
+                            <span id="relaySwitchLed" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-950 text-rose-300 border border-rose-700">NGẮT</span>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-indigo-900/50 rounded-xl p-3 border border-indigo-800">
+                            <!-- Bên trái: 3 chân điều khiển (DC+, DC-, IN) -->
+                            <div class="flex flex-col gap-2.5">
+                                <span class="text-[10px] uppercase tracking-wider text-indigo-300 font-bold">Điều khiển</span>
+                                <button type="button" data-pin="REL_DCP" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-REL_DCP" class="w-5 h-5 rounded-full bg-rose-500 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-rose-300 group-hover:underline">DC+</span>
+                                </button>
+                                <button type="button" data-pin="REL_DCN" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-REL_DCN" class="w-5 h-5 rounded-full bg-slate-950 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-slate-300 group-hover:underline">DC-</span>
+                                </button>
+                                <button type="button" data-pin="REL_IN" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-REL_IN" class="w-5 h-5 rounded-full bg-amber-400 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-amber-300 group-hover:underline">IN</span>
+                                </button>
+                            </div>
+
+                            <!-- Biểu tượng cuộn hút & tiếp điểm công tắc giữa Relay -->
+                            <div class="flex flex-col items-center justify-center px-2">
+                                <div class="w-12 h-14 rounded-lg bg-sky-600 border-2 border-sky-400 flex flex-col items-center justify-center shadow-inner">
+                                    <span class="text-[9px] font-extrabold text-white">5VDC</span>
+                                    <div id="relayContactIcon" class="w-6 h-1 bg-amber-300 mt-1.5 rounded transition-transform duration-200 -rotate-25"></div>
+                                </div>
+                                <span class="text-[9px] text-indigo-300 mt-1 font-semibold">Công tắc tải</span>
+                            </div>
+
+                            <!-- Bên phải: 2 chân tiếp điểm tải (COM, NO) -->
+                            <div class="flex flex-col gap-3 items-end">
+                                <span class="text-[10px] uppercase tracking-wider text-indigo-300 font-bold">Tiếp điểm</span>
+                                <button type="button" data-pin="REL_COM" class="pin-btn group flex items-center justify-end gap-2 focus:outline-none">
+                                    <span class="text-xs font-extrabold text-emerald-300 group-hover:underline">COM</span>
+                                    <span id="pin-REL_COM" class="w-5 h-5 rounded-full bg-emerald-500 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                </button>
+                                <button type="button" data-pin="REL_NO" class="pin-btn group flex items-center justify-end gap-2 focus:outline-none">
+                                    <span class="text-xs font-extrabold text-teal-300 group-hover:underline">NO</span>
+                                    <span id="pin-REL_NO" class="w-5 h-5 rounded-full bg-teal-500 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KHỐI 4: MÁY BƠM CHÌM MINI 5V DC -->
+                    <div class="bg-teal-950 text-white rounded-2xl p-4 shadow-lg border-2 border-teal-700 flex flex-col justify-between">
+                        <div class="flex items-center justify-between border-b border-teal-800 pb-2 mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">💧</span>
+                                <div>
+                                    <h3 class="text-sm font-extrabold text-teal-300">KHỐI 4: MÁY BƠM MINI 5V</h3>
+                                    <p class="text-[11px] text-teal-200/70">Động cơ bơm chìm DC 3V – 5V</p>
+                                </div>
+                            </div>
+                            <span id="pumpStateBadge" class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-teal-900 text-teal-300 border border-teal-700">DỪNG</span>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-teal-900/60 rounded-xl p-3 border border-teal-800">
+                            <!-- 2 Dây nguồn của Máy bơm -->
+                            <div class="flex flex-col gap-3">
+                                <button type="button" data-pin="PUMP_POS" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-PUMP_POS" class="w-5 h-5 rounded-full bg-rose-500 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-rose-300 group-hover:underline">Dây đỏ (+5V)</span>
+                                </button>
+                                <button type="button" data-pin="PUMP_NEG" class="pin-btn group flex items-center gap-2 focus:outline-none">
+                                    <span id="pin-PUMP_NEG" class="w-5 h-5 rounded-full bg-slate-950 border-2 border-white shadow-md transition-transform group-hover:scale-125"></span>
+                                    <span class="text-xs font-extrabold text-slate-300 group-hover:underline">Dây đen (-/GND)</span>
+                                </button>
+                            </div>
+
+                            <!-- Minh họa máy bơm & cánh quạt + vòi phun -->
+                            <div class="relative flex items-center gap-2 pr-3">
+                                <div class="w-16 h-14 rounded-2xl bg-slate-100 text-slate-800 border-2 border-teal-400 flex flex-col items-center justify-center shadow">
+                                    <!-- Cánh quạt quay khi bơm hoạt động -->
+                                    <svg id="pumpRotor" viewBox="0 0 24 24" class="w-7 h-7 text-teal-600">
+                                        <circle cx="12" cy="12" r="3" fill="currentColor" />
+                                        <path d="M12 2v6M12 16v6M2 12h6M16 12h6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+                                    </svg>
+                                    <span class="text-[9px] font-extrabold text-slate-700">BƠM 5V</span>
+                                </div>
+                                <!-- Vòi nước & tia nước -->
+                                <div id="waterSpray" class="hidden flex flex-col gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-sky-400 spray-anim"></span>
+                                    <span class="w-2.5 h-2.5 rounded-full bg-cyan-300 spray-anim" style="animation-delay: 0.2s"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- CỘT PHẢI (4/12): BẢNG KIỂM TRA LỖI, DANH SÁCH MỐI NỐI & CHẠY THỬ -->
+        <section class="lg:col-span-4 flex flex-col gap-4">
+
+            <!-- HỘP CẢNH BÁO NGẮN MẠCH / KẾT QUẢ KIỂM TRA -->
+            <div id="diagnosticCard" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 transition-all">
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3 mb-3">
+                    <span>🩺</span> Chẩn đoán An toàn Mạch điện
+                </h2>
+
+                <!-- Thông báo mặc định / Lỗi / Thành công -->
+                <div id="diagnosticBox" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-700 leading-relaxed">
+                    Hãy nối đủ <strong>8 mối nối</strong> theo nguyên tắc:<br>
+                    1. Cấp nguồn <strong>+5V</strong> và <strong>GND</strong> cho Cảm biến &amp; Relay.<br>
+                    2. Nối tín hiệu <strong>DO</strong> (Cảm biến) vào <strong>IN</strong> (Relay).<br>
+                    3. Mắc nối tiếp tiếp điểm <strong>COM – NO</strong> của Relay để đóng/ngắt nguồn cho Máy bơm.
+                </div>
+
+                <!-- BẢNG CHẠY THỬ NGHIỆM (CHỈ MỞ KHÓA KHI NỐI ĐÚNG 100% VÀ CẤP NGUỒN) -->
+                <div id="testBenchPanel" class="hidden mt-4 pt-4 border-t border-slate-200">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></span>
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-700">
+                            MẠCH AN TOÀN – ĐÃ SẴN SÀNG CẤP NGUỒN
+                        </span>
+                    </div>
+
+                    <p class="text-xs text-slate-600 mb-3">
+                        Bấm chọn trạng thái độ ẩm đất bên dưới để kiểm tra phản ứng đóng/ngắt của Relay và Máy bơm:
+                    </p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <button id="btnTestDry" type="button" class="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-950 transition shadow-sm">
+                            <span class="text-lg mb-0.5">🏜️</span>
+                            <span class="text-xs font-extrabold">Đất khô (DO = LOW)</span>
+                            <span class="text-[10px] text-amber-700 font-semibold mt-0.5">Kích Relay → Bật bơm</span>
+                        </button>
+
+                        <button id="btnTestWet" type="button" class="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-emerald-500 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 transition shadow-sm">
+                            <span class="text-lg mb-0.5">🌿</span>
+                            <span class="text-xs font-extrabold">Đất ẩm (DO = HIGH)</span>
+                            <span class="text-[10px] text-emerald-700 font-semibold mt-0.5">Ngắt Relay → Dừng bơm</span>
+                        </button>
+                    </div>
+
+                    <!-- Giải thích luồng tín hiệu hiện tại -->
+                    <div id="liveSimulationExplain" class="mt-3 p-3 rounded-xl bg-slate-900 text-slate-100 text-xs leading-relaxed">
+                        ⚡ Nguồn 5V đã sẵn sàng. Hãy bấm <strong>"Đất khô (DO = LOW)"</strong> hoặc <strong>"Đất ẩm (DO = HIGH)"</strong> để chạy thử!
+                    </div>
+                </div>
+            </div>
+
+            <!-- DANH SÁCH KIỂM TRA 8 MỐI NỐI CHUẨN (CHECKLIST) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex-1">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
+                    <h3 class="text-sm font-bold text-slate-800">📋 Bảng kiểm 8 Mối nối Kỹ thuật</h3>
+                    <span class="text-[11px] font-semibold text-slate-500">Tự động cập nhật</span>
+                </div>
+                <ul id="checklistContainer" class="space-y-2 text-xs">
+                    <!-- Danh sách được render tự động bằng JavaScript -->
+                </ul>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER LƯU Ý AN TOÀN -->
+    <footer class="bg-white border-t border-slate-200 py-3 px-4 text-center text-xs text-slate-500">
+        🛡️ <strong>Quy tắc An toàn Thực hành STEM:</strong> Tuyệt đối không nối trực tiếp <strong>+5V</strong> vào <strong>GND</strong> (gây ngắn mạch nóng chảy dây/pin). Khi lắp thật, đặt Module Relay và Cảm biến cao hơn mực nước!
+    </footer>
+
+    <script>
+        // --- ĐỊNH NGHĨA CÁC CHÂN LINH KIỆN & MÀU SẮC ---
+        const PINS = {
+            PWR_5V:   { label: 'Nguồn +5V',      group: 'POWER_POS', color: '#ef4444' },
+            PWR_GND:  { label: 'Nguồn GND',      group: 'POWER_GND', color: '#1e293b' },
+            SEN_VCC:  { label: 'Cảm biến VCC',   group: 'POWER_POS', color: '#ef4444' },
+            SEN_GND:  { label: 'Cảm biến GND',   group: 'POWER_GND', color: '#1e293b' },
+            SEN_DO:   { label: 'Cảm biến DO',    group: 'SIGNAL',    color: '#f59e0b' },
+            REL_DCP:  { label: 'Relay DC+',      group: 'POWER_POS', color: '#ef4444' },
+            REL_DCN:  { label: 'Relay DC-',      group: 'POWER_GND', color: '#1e293b' },
+            REL_IN:   { label: 'Relay IN',       group: 'SIGNAL',    color: '#f59e0b' },
+            REL_COM:  { label: 'Relay COM',      group: 'RELAY_SW',  color: '#10b981' },
+            REL_NO:   { label: 'Relay NO',       group: 'RELAY_SW',  color: '#14b8a6' },
+            PUMP_POS: { label: 'Bơm Dây đỏ (+)', group: 'PUMP_POS',  color: '#ef4444' },
+            PUMP_NEG: { label: 'Bơm Dây đen (-)',group: 'POWER_GND', color: '#1e293b' }
+        };
+
+        // --- 8 YÊU CẦU MỐI NỐI CHUẨN (HỖ TRỢ CẢ ĐẢO COM VÀ NO) ---
+        const CHECKLIST_ITEMS = [
+            { id: 'c1', label: 'Cảm biến VCC ↔ Nguồn +5V', desc: 'Cấp nguồn dương cho mạch LM393' },
+            { id: 'c2', label: 'Cảm biến GND ↔ Nguồn GND', desc: 'Nối cực âm chung cho cảm biến' },
+            { id: 'c3', label: 'Relay DC+ ↔ Nguồn +5V',    desc: 'Cấp nguồn dương cho cuộn hút Relay' },
+            { id: 'c4', label: 'Relay DC- ↔ Nguồn GND',    desc: 'Nối cực âm chung cho Relay' },
+            { id: 'c5', label: 'Cảm biến DO ↔ Relay IN',   desc: 'Truyền tín hiệu điều khiển đóng/ngắt' },
+            { id: 'c6', label: 'Relay COM (hoặc NO) ↔ Nguồn +5V', desc: 'Đưa nguồn +5V vào 1 đầu công tắc Relay' },
+            { id: 'c7', label: 'Relay NO (hoặc COM) ↔ Bơm (+)',   desc: 'Nối đầu còn lại của Relay tới dây đỏ Bơm' },
+            { id: 'c8', label: 'Bơm Dây đen (-) ↔ Nguồn GND',     desc: 'Khép kín mạch động lực về cực âm nguồn' }
+        ];
+
+        // --- TRẠNG THÁI ỨNG DỤNG ---
+        let wires = []; // Mảng các dây đã nối: { id, from, to, color, isShort }
+        let selectedPin = null;
+        let isPowered = false;
+        let soilState = 'WET'; // 'DRY' (DO = LOW -> Bơm bật) hoặc 'WET' (DO = HIGH -> Bơm tắt)
+
+        // --- THAM CHIẾU DOM ---
+        const circuitBoard = document.getElementById('circuitBoard');
+        const wireSvg = document.getElementById('wireSvg');
+        const wiresLayer = document.getElementById('wiresLayer');
+        const previewWire = document.getElementById('previewWire');
+        const sparkLayer = document.getElementById('sparkLayer');
+
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const bannerStatus = document.getElementById('bannerStatus');
+        const statusDot = document.getElementById('statusDot');
+        const statusMessage = document.getElementById('statusMessage');
+
+        const diagnosticCard = document.getElementById('diagnosticCard');
+        const diagnosticBox = document.getElementById('diagnosticBox');
+        const testBenchPanel = document.getElementById('testBenchPanel');
+        const checklistContainer = document.getElementById('checklistContainer');
+
+        const powerLed = document.getElementById('powerLed');
+        const sensorStateBadge = document.getElementById('sensorStateBadge');
+        const relaySwitchLed = document.getElementById('relaySwitchLed');
+        const relayContactIcon = document.getElementById('relayContactIcon');
+        const pumpStateBadge = document.getElementById('pumpStateBadge');
+        const pumpRotor = document.getElementById('pumpRotor');
+        const waterSpray = document.getElementById('waterSpray');
+        const liveSimulationExplain = document.getElementById('liveSimulationExplain');
+
+        // --- HÀM KIỂM TRA DÂY CÓ TỒN TẠI KHÔNG ---
+        function hasWire(a, b) {
+            return wires.some(w => (w.from === a && w.to === b) || (w.from === b && w.to === a));
+        }
+
+        // --- XÂY DỰNG ĐỒ THỊ LIÊN THÔNG ĐỂ KIỂM TRA ĐẤU NỐI THÔNG MINH ---
+        function buildAdjacency() {
+            const adj = {};
+            Object.keys(PINS).forEach(k => adj[k] = []);
+            wires.forEach(w => {
+                adj[w.from].push(w.to);
+                adj[w.to].push(w.from);
+            });
+            return adj;
+        }
+
+        // Kiểm tra 2 chân có thông mạch với nhau không (kể cả nối qua chân trung gian)
+        function isConnected(start, target, adj) {
+            if (start === target) return true;
+            const visited = new Set([start]);
+            const queue = [start];
+            while (queue.length > 0) {
+                const curr = queue.shift();
+                for (const nxt of adj[curr]) {
+                    if (nxt === target) return true;
+                    if (!visited.has(nxt)) {
+                        visited.add(nxt);
+                        queue.push(nxt);
+                    }
+                }
+            }
+            return false;
+        }
+
+        // --- PHÂN TÍCH LỖI NGẮN MẠCH & ĐÁNH GIÁ 8 MỐI NỐI ---
+        function evaluateCircuit() {
+            const adj = buildAdjacency();
+            const errors = [];
+
+            // 1. Kiểm tra chập nguồn +5V trực tiếp vào GND
+            if (isConnected('PWR_5V', 'PWR_GND', adj)) {
+                errors.push('<strong>NGẮN MẠCH NGUỒN (+5V chập GND):</strong> Cực dương +5V đang nối thông với cực âm GND! Điều này làm nóng chảy dây dẫn và hỏng pin/cổng USB ngay lập tức.');
+            }
+
+            // 2. Kiểm tra đảo cực nguồn cho Cảm biến hoặc Relay
+            if (isConnected('SEN_VCC', 'PWR_GND', adj) || isConnected('SEN_GND', 'PWR_5V', adj)) {
+                errors.push('<strong>SAI CỰC TÍNH CẢM BIẾN:</strong> Chân VCC của cảm biến phải nối +5V và GND phải nối GND. Đấu ngược cực sẽ làm cháy chip LM393.');
+            }
+            if (isConnected('REL_DCP', 'PWR_GND', adj) || isConnected('REL_DCN', 'PWR_5V', adj)) {
+                errors.push('<strong>SAI CỰC TÍNH RELAY:</strong> Chân DC+ của Relay phải nối +5V và DC- phải nối GND.');
+            }
+
+            // 3. Kiểm tra chân tín hiệu DO / IN chập thẳng vào nguồn
+            if (isConnected('SEN_DO', 'PWR_5V', adj) || isConnected('SEN_DO', 'PWR_GND', adj)) {
+                errors.push('<strong>LỖI CHÂN TÍN HIỆU (DO):</strong> Chân DO của cảm biến không được nối trực tiếp vào nguồn +5V hoặc GND mà phải nối vào chân <strong>IN</strong> của Relay.');
+            }
+            if (isConnected('REL_IN', 'PWR_5V', adj) || isConnected('REL_IN', 'PWR_GND', adj)) {
+                errors.push('<strong>LỖI CHÂN ĐIỀU KHIỂN (IN):</strong> Chân IN của Relay phải nhận tín hiệu từ chân <strong>DO</strong> của cảm biến (nếu nối thẳng nguồn thì máy bơm sẽ không tự động theo độ ẩm đất).');
+            }
+
+            // 4. Kiểm tra máy bơm nối thẳng nguồn (bỏ qua Relay -> bơm chạy mãi không ngắt)
+            if (isConnected('PUMP_POS', 'PWR_5V', adj) && isConnected('PUMP_NEG', 'PWR_GND', adj)) {
+                errors.push('<strong>BƠM NỐI THẲNG NGUỒN (BỎ QUA RELAY):</strong> Bạn đang nối máy bơm trực tiếp vào +5V và GND nên bơm sẽ chạy liên tục không tự ngắt. Hãy cho dây dương (+5V) đi qua tiếp điểm <strong>COM – NO</strong> của Relay!');
+            }
+            if (isConnected('PUMP_POS', 'PWR_GND', adj) || isConnected('PUMP_NEG', 'PWR_5V', adj)) {
+                errors.push('<strong>NGƯỢC CỰC MÁY BƠM:</strong> Dây đen (-) của máy bơm phải nối về GND, dây đỏ (+) nhận nguồn +5V thông qua tiếp điểm Relay.');
+            }
+
+            // 5. Kiểm tra từng hạng mục trong 8 mối nối chuẩn
+            // Hỗ trợ cả 2 chiều công tắc Relay: (COM->+5V & NO->Bơm+) HOẶC (NO->+5V & COM->Bơm+)
+            const swNormal = isConnected('REL_COM', 'PWR_5V', adj) && isConnected('REL_NO', 'PUMP_POS', adj) && !isConnected('REL_COM', 'REL_NO', adj);
+            const swSwapped = isConnected('REL_NO', 'PWR_5V', adj) && isConnected('REL_COM', 'PUMP_POS', adj) && !isConnected('REL_COM', 'REL_NO', adj);
+
+            const cond6 = swNormal || swSwapped || isConnected('REL_COM', 'PWR_5V', adj) || isConnected('REL_NO', 'PWR_5V', adj);
+            const cond7 = swNormal || swSwapped || isConnected('REL_NO', 'PUMP_POS', adj) || isConnected('REL_COM', 'PUMP_POS', adj);
+
+            // Chặn trường hợp nối tắt COM với NO
+            if (isConnected('REL_COM', 'REL_NO', adj)) {
+                errors.push('<strong>NỐI TẮT TIẾP ĐIỂM RELAY (COM chập NO):</strong> Không được nối dây trực tiếp giữa chân COM và NO vì sẽ làm mất tác dụng đóng/ngắt của công tắc Relay.');
+            }
+
+            const statusMap = {
+                c1: isConnected('SEN_VCC', 'PWR_5V', adj) && !isConnected('SEN_VCC', 'PWR_GND', adj),
+                c2: isConnected('SEN_GND', 'PWR_GND', adj) && !isConnected('SEN_GND', 'PWR_5V', adj),
+                c3: isConnected('REL_DCP', 'PWR_5V', adj) && !isConnected('REL_DCP', 'PWR_GND', adj),
+                c4: isConnected('REL_DCN', 'PWR_GND', adj) && !isConnected('REL_DCN', 'PWR_5V', adj),
+                c5: isConnected('SEN_DO', 'REL_IN', adj) && !isConnected('SEN_DO', 'PWR_5V', adj) && !isConnected('SEN_DO', 'PWR_GND', adj),
+                c6: cond6 && !isConnected('REL_COM', 'REL_NO', adj),
+                c7: cond7 && !isConnected('REL_COM', 'REL_NO', adj) && (swNormal || swSwapped || (!isConnected('PUMP_POS', 'PWR_5V', adj))),
+                c8: isConnected('PUMP_NEG', 'PWR_GND', adj) && !isConnected('PUMP_NEG', 'PWR_5V', adj)
+            };
+
+            const completedCount = Object.values(statusMap).filter(Boolean).length;
+            const isPerfect = (completedCount === 8) && (errors.length === 0);
+
+            return { errors, statusMap, completedCount, isPerfect };
+        }
+
+        // --- LẤY TỌA ĐỘ TÂM CỦA CHÂN LINH KIỆN TRÊN BẢNG MẠCH ---
+        function getPinCenter(pinId) {
+            const pinEl = document.getElementById(`pin-${pinId}`);
+            const boardRect = circuitBoard.getBoundingClientRect();
+            const pinRect = pinEl.getBoundingClientRect();
+            return {
+                x: pinRect.left - boardRect.left + pinRect.width / 2,
+                y: pinRect.top - boardRect.top + pinRect.height / 2
+            };
+        }
+
+        // --- VẼ LẠI TẤT CẢ DÂY DẪN SVG ---
+        function renderWires(hasShortCircuit = false) {
+            wiresLayer.innerHTML = '';
+            sparkLayer.innerHTML = '';
+
+            wires.forEach((wire) => {
+                const p1 = getPinCenter(wire.from);
+                const p2 = getPinCenter(wire.to);
+
+                // Tạo đường cong Bezier mềm mại giống dây nhảy Breadboard thật
+                const dx = Math.abs(p2.x - p1.x);
+                const dy = Math.abs(p2.y - p1.y);
+                const curveOffset = Math.max(35, Math.min(90, (dx + dy) * 0.25));
+                const midX = (p1.x + p2.x) / 2;
+                const midY = (p1.y + p2.y) / 2 + (p1.y < p2.y ? -15 : 15);
+
+                const pathData = `M ${p1.x} ${p1.y} Q ${midX} ${midY + curveOffset * 0.35} ${p2.x} ${p2.y}`;
+
+                // Vỏ bọc bóng tạo độ nổi 3D cho dây
+                const shadowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                shadowPath.setAttribute('d', pathData);
+                shadowPath.setAttribute('fill', 'none');
+                shadowPath.setAttribute('stroke', '#ffffff');
+                shadowPath.setAttribute('stroke-width', '6.5');
+                shadowPath.setAttribute('stroke-linecap', 'round');
+                shadowPath.setAttribute('opacity', '0.75');
+                wiresLayer.appendChild(shadowPath);
+
+                // Lõi dây màu
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke', hasShortCircuit ? '#ef4444' : wire.color);
+                path.setAttribute('stroke-width', '4.2');
+                path.setAttribute('stroke-linecap', 'round');
+                path.classList.add('wire-path');
+
+                // Hiệu ứng dòng điện chạy khi mạch đã cấp nguồn và đang bơm
+                if (isPowered && !hasShortCircuit && soilState === 'DRY') {
+                    path.classList.add('wire-active-flow');
+                }
+
+                // Bấm vào dây để xóa dây đó
+                path.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    wires = wires.filter(w => w.id !== wire.id);
+                    isPowered = false;
+                    updateAllUI();
+                });
+
+                wiresLayer.appendChild(path);
+            });
+
+            // Nếu có ngắn mạch, vẽ biểu tượng tia lửa điện tại trung tâm bảng mạch
+            if (hasShortCircuit) {
+                sparkLayer.classList.remove('hidden');
+                const w = circuitBoard.clientWidth;
+                const h = circuitBoard.clientHeight;
+                sparkLayer.innerHTML = `
+                    <g transform="translate(${w / 2}, ${h / 2})" filter="url(#glowRed)">
+                        <circle cx="0" cy="0" r="34" fill="#fee2e2" stroke="#ef4444" stroke-width="3" />
+                        <text x="0" y="8" text-anchor="middle" font-size="30">💥</text>
+                    </g>
+                `;
+            } else {
+                sparkLayer.classList.add('hidden');
+            }
+        }
+
+        // --- CẬP NHẬT TOÀN BỘ GIAO DIỆN & TRẠNG THÁI MÔ PHỎNG ---
+        function updateAllUI() {
+            const { errors, statusMap, completedCount, isPerfect } = evaluateCircuit();
+            const hasShortCircuit = errors.length > 0;
+
+            // 1. Cập nhật thanh tiến độ
+            const pct = Math.round((completedCount / 8) * 100);
+            progressBar.style.width = `${pct}%`;
+            progressText.textContent = `${completedCount}/8 mối nối`;
+
+            // 2. Cập nhật Bảng kiểm 8 mối nối
+            checklistContainer.innerHTML = CHECKLIST_ITEMS.map(item => {
+                const done = statusMap[item.id];
+                return `
+                    <li class="flex items-start gap-2.5 p-2 rounded-xl border ${done ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950' : 'bg-slate-50 border-slate-200 text-slate-600'}">
+                        <span class="mt-0.5 text-sm">${done ? '✅' : '⬜'}</span>
+                        <div>
+                            <div class="font-bold ${done ? 'text-emerald-800' : 'text-slate-700'}">${item.label}</div>
+                            <div class="text-[11px] opacity-80">${item.desc}</div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+
+            // 3. Xử lý cảnh báo ngắn mạch / lỗi đấu nối
+            if (hasShortCircuit) {
+                isPowered = false;
+                circuitBoard.classList.add('short-circuit-bg', 'border-rose-500');
+                circuitBoard.classList.remove('border-slate-200', 'border-emerald-500');
+
+                bannerStatus.className = 'flex items-center gap-2 text-xs sm:text-sm font-extrabold px-3.5 py-1.5 rounded-xl bg-rose-100 text-rose-800 border border-rose-300 animate-pulse';
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-600';
+                statusMessage.textContent = '⚠️ NGẮN MẠCH / SAI CỰC TÍNH — Đã tự động ngắt nguồn bảo vệ!';
+
+                diagnosticCard.className = 'bg-rose-50 rounded-2xl shadow-md border-2 border-rose-500 p-5 transition-all';
+                diagnosticBox.className = 'p-3.5 rounded-xl bg-white border border-rose-300 text-xs sm:text-sm text-rose-900 space-y-2 leading-relaxed';
+                diagnosticBox.innerHTML = `
+                    <div class="font-extrabold text-rose-700 flex items-center gap-1.5">
+                        <span>🚨 PHÁT HIỆN LỖI KỸ THUẬT NGUY HIỂM:</span>
+                    </div>
+                    ${errors.map(err => `<p>• ${err}</p>`).join('')}
+                    <p class="text-[11px] text-slate-500 italic pt-1">👉 Hãy bấm trực tiếp vào dây nối sai trên bảng mạch để gỡ bỏ và đấu lại!</p>
+                `;
+                testBenchPanel.classList.add('hidden');
+            } else {
+                circuitBoard.classList.remove('short-circuit-bg', 'border-rose-500');
+                diagnosticCard.className = 'bg-white rounded-2xl shadow-sm border border-slate-200 p-5 transition-all';
+
+                if (isPerfect && isPowered) {
+                    // Mạch đúng 100% và đã bật nguồn
+                    circuitBoard.classList.add('border-emerald-500');
+                    circuitBoard.classList.remove('border-slate-200');
+
+                    bannerStatus.className = 'flex items-center gap-2 text-xs sm:text-sm font-extrabold px-3.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-300';
+                    statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-600';
+                    statusMessage.textContent = '🟢 MẠCH AN TOÀN – ĐÃ SẴN SÀNG CẤP NGUỒN 5V!';
+
+                    diagnosticBox.className = 'p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-900 leading-relaxed';
+                    diagnosticBox.innerHTML = `
+                        <strong>🎉 Xuất sắc!</strong> Sơ đồ đấu nối chuẩn xác 8/8 mối nối, không có hiện tượng chập mạch hay ngược cực. Bạn có thể vận hành thử nghiệm ở khung bên dưới.
+                    `;
+                    testBenchPanel.classList.remove('hidden');
+                } else if (isPerfect && !isPowered) {
+                    circuitBoard.classList.remove('border-emerald-500');
+                    circuitBoard.classList.add('border-slate-200');
+
+                    bannerStatus.className = 'flex items-center gap-2 text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl bg-sky-100 text-sky-800 border border-sky-300';
+                    statusDot.className = 'w-2.5 h-2.5 rounded-full bg-sky-600';
+                    statusMessage.textContent = '✅ Đã nối đủ 8/8 mối nối! Hãy bấm nút "Kiểm tra & Cấp nguồn 5V".';
+
+                    diagnosticBox.className = 'p-3.5 rounded-xl bg-sky-50 border border-sky-200 text-xs sm:text-sm text-sky-900 leading-relaxed';
+                    diagnosticBox.innerHTML = `
+                        Bạn đã hoàn thành đủ <strong>8/8 mối nối</strong>. Hãy nhấn nút màu xanh lá <strong>"⚡ Kiểm tra & Cấp nguồn 5V"</strong> ở góc trên để cấp điện và chạy thử nghiệm!
+                    `;
+                    testBenchPanel.classList.add('hidden');
+                } else {
+                    circuitBoard.classList.remove('border-emerald-500');
+                    circuitBoard.classList.add('border-slate-200');
+
+                    bannerStatus.className = 'flex items-center gap-2 text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200';
+                    statusDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400';
+                    statusMessage.textContent = `Đang đấu nối (${completedCount}/8 mối nối) — Không phát hiện chập mạch.`;
+
+                    diagnosticBox.className = 'p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-700 leading-relaxed';
+                    diagnosticBox.innerHTML = `
+                        Hãy nối đủ <strong>8 mối nối</strong> theo bảng kiểm bên dưới:<br>
+                        • Chọn 1 chân linh kiện (viền sáng xanh), sau đó chọn chân đích để tạo dây nối.<br>
+                        • Bấm vào dây đã vẽ nếu muốn tháo dây ra nối lại.
+                    `;
+                    testBenchPanel.classList.add('hidden');
+                }
+            }
+
+            // 4. Cập nhật hiệu ứng phần cứng trực quan khi Cấp nguồn
+            if (isPowered && isPerfect) {
+                powerLed.textContent = 'ON • 5V';
+                powerLed.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500 text-slate-950';
+
+                if (soilState === 'DRY') {
+                    // Đất khô -> Cảm biến xuất DO = LOW -> Relay kích đóng COM-NO -> Bơm chạy
+                    sensorStateBadge.textContent = 'DO = LOW (Khô)';
+                    sensorStateBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-400 text-slate-950';
+
+                    relaySwitchLed.textContent = 'ĐÓNG (ON)';
+                    relaySwitchLed.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500 text-slate-950';
+                    relayContactIcon.classList.remove('-rotate-25');
+                    relayContactIcon.classList.add('rotate-0', 'bg-emerald-400');
+
+                    pumpStateBadge.textContent = 'ĐANG BƠM';
+                    pumpStateBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500 text-slate-950 animate-pulse';
+                    pumpRotor.classList.add('pump-spinning');
+                    waterSpray.classList.remove('hidden');
+
+                    liveSimulationExplain.innerHTML = `
+                        🏜️ <strong>Trạng thái Đất khô:</strong> Đầu dò điện trở cao → LM393 xuất tín hiệu mức thấp <strong>(DO = LOW)</strong> → Cuộn hút Relay 5V đóng tiếp điểm <strong>COM – NO</strong> → Dòng điện 5V chạy qua làm <strong>Máy bơm quay và tưới nước!</strong>
+                    `;
+                } else {
+                    // Đất ẩm -> Cảm biến xuất DO = HIGH -> Relay ngắt -> Bơm dừng
+                    sensorStateBadge.textContent = 'DO = HIGH (Ẩm)';
+                    sensorStateBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-sky-400 text-slate-950';
+
+                    relaySwitchLed.textContent = 'NGẮT (OFF)';
+                    relaySwitchLed.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-950 text-rose-300 border border-rose-700';
+                    relayContactIcon.classList.add('-rotate-25');
+                    relayContactIcon.classList.remove('rotate-0', 'bg-emerald-400');
+
+                    pumpStateBadge.textContent = 'DỪNG';
+                    pumpStateBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-teal-900 text-teal-300 border border-teal-700';
+                    pumpRotor.classList.remove('pump-spinning');
+                    waterSpray.classList.add('hidden');
+
+                    liveSimulationExplain.innerHTML = `
+                        🌿 <strong>Trạng thái Đất ẩm đủ nước:</strong> Đất dẫn điện tốt → LM393 xuất tín hiệu mức cao <strong>(DO = HIGH)</strong> → Relay nhả tiếp điểm <strong>COM – NO</strong> (hở mạch) → <strong>Máy bơm dừng hoạt động</strong>, tiết kiệm điện và nước!
+                    `;
+                }
+            } else {
+                // Chưa cấp nguồn
+                powerLed.textContent = 'OFF';
+                powerLed.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-400 border border-slate-600';
+                sensorStateBadge.textContent = 'LM393';
+                sensorStateBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-sky-900 text-sky-300 border border-sky-700';
+                relaySwitchLed.textContent = 'NGẮT';
+                relaySwitchLed.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-950 text-rose-300 border border-rose-700';
+                relayContactIcon.classList.add('-rotate-25');
+                relayContactIcon.classList.remove('rotate-0', 'bg-emerald-400');
+                pumpStateBadge.textContent = 'DỪNG';
+                pumpStateBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-teal-900 text-teal-300 border border-teal-700';
+                pumpRotor.classList.remove('pump-spinning');
+                waterSpray.classList.add('hidden');
+            }
+
+            renderWires(hasShortCircuit);
+        }
+
+        // --- XỬ LÝ BẤM CHỌN CHÂN LINH KIỆN ĐỂ NỐI DÂY ---
+        document.querySelectorAll('.pin-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const pinId = btn.getAttribute('data-pin');
+
+                // Nếu chưa chọn chân nào -> Chọn chân thứ nhất
+                if (!selectedPin) {
+                    selectedPin = pinId;
+                    document.getElementById(`pin-${pinId}`).classList.add('pin-selected');
+                    return;
+                }
+
+                // Nếu bấm lại chính chân đang chọn -> Hủy chọn
+                if (selectedPin === pinId) {
+                    document.getElementById(`pin-${selectedPin}`).classList.remove('pin-selected');
+                    selectedPin = null;
+                    previewWire.classList.add('hidden');
+                    return;
+                }
+
+                // Đã có chân thứ nhất và bấm chân thứ hai -> Tạo dây nối nếu chưa tồn tại
+                if (!hasWire(selectedPin, pinId)) {
+                    const wireColor = PINS[selectedPin].color || '#0284c7';
+                    wires.push({
+                        id: `${selectedPin}_${pinId}_${Date.now()}`,
+                        from: selectedPin,
+                        to: pinId,
+                        color: wireColor
+                    });
+                }
+
+                // Bỏ trạng thái chọn chân
+                document.getElementById(`pin-${selectedPin}`).classList.remove('pin-selected');
+                selectedPin = null;
+                previewWire.classList.add('hidden');
+                isPowered = false; // Tắt nguồn tạm khi thay đổi dây nối
+                updateAllUI();
+            });
+        });
+
+        // Vẽ dây dẫn hướng theo con trỏ chuột khi đang chọn 1 chân
+        circuitBoard.addEventListener('mousemove', (e) => {
+            if (!selectedPin) return;
+            const p1 = getPinCenter(selectedPin);
+            const boardRect = circuitBoard.getBoundingClientRect();
+            const mouseX = e.clientX - boardRect.left;
+            const mouseY = e.clientY - boardRect.top;
+
+            previewWire.setAttribute('d', `M ${p1.x} ${p1.y} L ${mouseX} ${mouseY}`);
+            previewWire.classList.remove('hidden');
+        });
+
+        // Bấm ra vùng trống trên bảng mạch để hủy chọn chân
+        circuitBoard.addEventListener('click', () => {
+            if (selectedPin) {
+                document.getElementById(`pin-${selectedPin}`).classList.remove('pin-selected');
+                selectedPin = null;
+                previewWire.classList.add('hidden');
+            }
+        });
+
+        // --- NÚT KIỂM TRA & CẤP NGUỒN 5V ---
+        document.getElementById('btnCheckPower').addEventListener('click', () => {
+            const { errors, isPerfect } = evaluateCircuit();
+            if (errors.length > 0) {
+                isPowered = false;
+                updateAllUI();
+                return;
+            }
+            if (!isPerfect) {
+                diagnosticBox.className = 'p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs sm:text-sm text-amber-900 leading-relaxed';
+                diagnosticBox.innerHTML = `
+                    <strong>⚠️ Mạch chưa kín!</strong> Bạn mới hoàn thành được một phần sơ đồ. Hãy kiểm tra các mục chưa tích xanh ở <em>Bảng kiểm 8 Mối nối Kỹ thuật</em> bên dưới rồi bấm Cấp nguồn lại nhé!
+                `;
+                return;
+            }
+            isPowered = true;
+            soilState = 'DRY'; // Mặc định chạy thử ở trạng thái đất khô để học sinh thấy ngay bơm hoạt động
+            updateAllUI();
+        });
+
+        // --- NÚT NỐI MẪU TỰ ĐỘNG (GỢI Ý) ---
+        document.getElementById('btnAutoWire').addEventListener('click', () => {
+            if (selectedPin) {
+                document.getElementById(`pin-${selectedPin}`).classList.remove('pin-selected');
+                selectedPin = null;
+                previewWire.classList.add('hidden');
+            }
+            wires = [
+                { id: 'w1', from: 'PWR_5V',  to: 'SEN_VCC',  color: '#ef4444' },
+                { id: 'w2', from: 'PWR_GND', to: 'SEN_GND',  color: '#1e293b' },
+                { id: 'w3', from: 'PWR_5V',  to: 'REL_DCP',  color: '#ef4444' },
+                { id: 'w4', from: 'PWR_GND', to: 'REL_DCN',  color: '#1e293b' },
+                { id: 'w5', from: 'SEN_DO',  to: 'REL_IN',   color: '#f59e0b' },
+                { id: 'w6', from: 'PWR_5V',  to: 'REL_COM',  color: '#10b981' },
+                { id: 'w7', from: 'REL_NO',  to: 'PUMP_POS', color: '#14b8a6' },
+                { id: 'w8', from: 'PWR_GND', to: 'PUMP_NEG', color: '#1e293b' }
+            ];
+            isPowered = false;
+            updateAllUI();
+        });
+
+        // --- NÚT XÓA TẤT CẢ DÂY ---
+        document.getElementById('btnClearAll').addEventListener('click', () => {
+            if (selectedPin) {
+                document.getElementById(`pin-${selectedPin}`).classList.remove('pin-selected');
+                selectedPin = null;
+                previewWire.classList.add('hidden');
+            }
+            wires = [];
+            isPowered = false;
+            updateAllUI();
+        });
+
+        // --- NÚT CHẠY THỬ NGHIỆM 2 TRẠNG THÁI ĐẤT ---
+        document.getElementById('btnTestDry').addEventListener('click', () => {
+            soilState = 'DRY';
+            updateAllUI();
+        });
+
+        document.getElementById('btnTestWet').addEventListener('click', () => {
+            soilState = 'WET';
+            updateAllUI();
+        });
+
+        // Cập nhật lại tọa độ dây khi thay đổi kích thước cửa sổ / xoay ngang điện thoại
+        window.addEventListener('resize', () => {
+            const { errors } = evaluateCircuit();
+            renderWires(errors.length > 0);
+        });
+
+        // Khởi tạo giao diện ban đầu
+        window.onload = () => {
+            updateAllUI();
+        };
+    </script>
+</body>
+</html>
